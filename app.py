@@ -5,23 +5,14 @@ import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
-# -----------------------------
-# Page Config
-# ----------------------------
 st.set_page_config(
     page_title="Customer Segmentation",
     layout="wide"
 )
 
-# -----------------------------
-# Title
-# -----------------------------
-st.title("📊 Customer Segmentation Dashboard")
+st.title("Customer Segmentation Dashboard")
 st.markdown("Perform **RFM Analysis** and **K-Means Clustering** easily.")
 
-# -----------------------------
-# Functions
-# -----------------------------
 def preprocess_data(df):
     df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
     df = df[(df['Quantity'] > 0) & (df['UnitPrice'] > 0)].copy()
@@ -71,23 +62,11 @@ def plot_clusters(rfm):
     ax.set_ylabel("Monetary Value")
     st.pyplot(fig)
 
-
-# -----------------------------
-# Sidebar
-# -----------------------------
-st.sidebar.header("⚙️ Settings")
+st.sidebar.header("Settings")
 
 delay_days = st.sidebar.slider("Recency Delay (days)", 1, 30, 1)
 n_clusters = st.sidebar.slider("Number of Clusters", 2, 6, 4)
-
-# -----------------------------
-# File Upload
-# -----------------------------
 uploaded_file = st.file_uploader("Upload cleanedcustomer.csv", type="csv")
-
-# -----------------------------
-# Main Logic
-# -----------------------------
 if uploaded_file:
     try:
         df = pd.read_csv(uploaded_file)
@@ -95,32 +74,16 @@ if uploaded_file:
 
         rfm = compute_rfm(df, delay_days)
         rfm = apply_kmeans(rfm, n_clusters)
-
-        # -----------------------------
-        # Metrics
-        # -----------------------------
         st.subheader("Summary")
         col1, col2, col3 = st.columns(3)
 
         col1.metric("Total Customers", len(rfm))
         col2.metric("Average Recency", int(rfm['Recency'].mean()))
         col3.metric("Total Revenue", int(rfm['Monetary'].sum()))
-
-        # -----------------------------
-        # Table
-        # -----------------------------
         st.subheader("RFM Table")
         st.dataframe(rfm, use_container_width=True)
-
-        # -----------------------------
-        # Plot
-        # -----------------------------
         st.subheader("Cluster Visualization")
         plot_clusters(rfm)
-
-        # -----------------------------
-        # Download
-        # -----------------------------
         csv = rfm.to_csv(index=False).encode('utf-8')
         st.download_button(
             "Download Results",
