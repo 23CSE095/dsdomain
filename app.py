@@ -6,89 +6,131 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
 # -----------------------------
-# Page config
+# Page Config
+# ----------------------------
+st.set_page_config(
+    page_title="Customer Segmentation",
+    layout="wide"
+)
+
 # -----------------------------
-st.set_page_config(page_title="Customer Segmentation", layout="wide")
+# Title
+# -----------------------------
 st.title("📊 Customer Segmentation Dashboard")
-st.markdown("""
-Upload your cleaned customer CSV and explore **RFM analysis** and **K-Means clustering** interactively.  
-Adjust Recency delay and number of clusters, and download the clustered data.
-""")
+st.markdown("Perform **RFM Analysis** and **K-Means Clustering** easily.")
 
 # -----------------------------
-# File upload
+# Functions
 # -----------------------------
-uploaded_file = st.file_uploader("Upload cleanedcustomer.csv", type="csv")
-
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
-    
-    # Ensure correct types
+def preprocess_data(df):
     df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
     df = df[(df['Quantity'] > 0) & (df['UnitPrice'] > 0)].copy()
     df['TotalAmount'] = df['Quantity'] * df['UnitPrice']
+    return df
 
-    # -----------------------------
-    # Sidebar controls
-    # -----------------------------
-    st.sidebar.header("Configuration")
-    delay_days = st.sidebar.slider("Recency Delay (days)", 1, 30, 1)
-    n_clusters = st.sidebar.slider("Number of Clusters", 2, 6, 4)
 
-    # -----------------------------
-    # Compute RFM
-    # -----------------------------
+def compute_rfm(df, delay_days):
     NOW = df['InvoiceDate'].max() + pd.Timedelta(days=delay_days)
+
     rfm = df.groupby('CustomerID').agg({
         'InvoiceDate': lambda x: (NOW - x.max()).days,
         'InvoiceNo': 'count',
         'TotalAmount': 'sum'
-    }).rename(columns={'InvoiceDate':'Recency','InvoiceNo':'Frequency','TotalAmount':'Monetary'}).reset_index()
-    rfm = rfm[rfm['Monetary'] > 0].reset_index(drop=True)
+    }).rename(columns={
+        'InvoiceDate': 'Recency',
+        'InvoiceNo': 'Frequency',
+        'TotalAmount': 'Monetary'
+    }).reset_index()
 
-    # -----------------------------
-    # K-Means clustering
-    # -----------------------------
+    return rfm[rfm['Monetary'] > 0]
+
+
+def apply_kmeans(rfm, n_clusters):
     scaler = StandardScaler()
-    rfm_scaled = scaler.fit_transform(rfm[['Recency','Frequency','Monetary']])
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    rfm['Cluster'] = kmeans.fit_predict(rfm_scaled)
+    scaled = scaler.fit_transform(rfm[['Recency', 'Frequency', 'Monetary']])
 
-    # -----------------------------
-    # Show RFM Table
-    # -----------------------------
-    st.subheader("RFM Table with Clusters")
-    st.dataframe(rfm)
+    model = KMeans(n_clusters=n_clusters, random_state=42)
+    rfm['Cluster'] = model.fit_predict(scaled)
 
-    # -----------------------------
-    # Scatter plot: Recency vs Monetary
-    # -----------------------------
-    st.subheader("Recency vs Monetary Scatter Plot")
-    plt.figure(figsize=(10,6))
+    return rfm
+
+
+def plot_clusters(rfm):
+    fig, ax = plt.subplots(figsize=(10, 6))
     sns.scatterplot(
+        data=rfm,
         x='Recency',
         y='Monetary',
         hue='Cluster',
-        data=rfm,
-        palette='Set1',
-        s=100
+        palette='Set2',
+        s=80,
+        ax=ax
     )
-    plt.xlabel('Recency (days)')
-    plt.ylabel('Monetary Value')
-    plt.title('Customer Segments')
-    plt.legend(title='Cluster')
-    st.pyplot(plt)
+    ax.set_title("Customer Segments")
+    ax.set_xlabel("Recency (days)")
+    ax.set_ylabel("Monetary Value")
+    st.pyplot(fig)
 
-    # -----------------------------
-    # CSV download
-    # -----------------------------
-    csv = rfm.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Download RFM CSV",
-        data=csv,
-        file_name='rfm_clusters.csv',
-        mime='text/csv'
-    )
+
+# -----------------------------
+# Sidebar
+# -----------------------------
+st.sidebar.header("⚙️ Settings")
+
+delay_days = st.sidebar.slider("Recency Delay (days)", 1, 30, 1)
+n_clusters = st.sidebar.slider("Number of Clusters", 2, 6, 4)
+
+# -----------------------------
+# File Upload
+# -----------------------------
+uploaded_file = st.file_uploader("Upload cleanedcustomer.csv", type="csv")
+
+# -----------------------------
+# Main Logic
+# -----------------------------
+if uploaded_file:
+    try:
+        df = pd.read_csv(uploaded_file)
+        df = preprocess_data(df)
+
+        rfm = compute_rfm(df, delay_days)
+        rfm = apply_kmeans(rfm, n_clusters)
+
+        # -----------------------------
+        # Metrics
+        # -----------------------------
+        st.subheader("Summary")
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("Total Customers", len(rfm))
+        col2.metric("Average Recency", int(rfm['Recency'].mean()))
+        col3.metric("Total Revenue", int(rfm['Monetary'].sum()))
+
+        # -----------------------------
+        # Table
+        # -----------------------------
+        st.subheader("RFM Table")
+        st.dataframe(rfm, use_container_width=True)
+
+        # -----------------------------
+        # Plot
+        # -----------------------------
+        st.subheader("Cluster Visualization")
+        plot_clusters(rfm)
+
+        # -----------------------------
+        # Download
+        # -----------------------------
+        csv = rfm.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "Download Results",
+            data=csv,
+            file_name="rfm_clusters.csv",
+            mime="text/csv"
+        )
+
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 else:
-    st.info("Please upload your cleanedcustomer.csv file to begin analysis.")
+    st.info("Upload your dataset to get started 🚀")
